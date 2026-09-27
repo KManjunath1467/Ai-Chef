@@ -1,87 +1,31 @@
+import "dotenv/config";
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
-const PORT = 3001;
 
-app.use(express.json({ limit: "20kb" }));
+const PORT = process.env.PORT || 3001;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-const SYSTEM_PROMPT = `
-You are AI Chef, an assistant that creates practical recipes from ingredients provided by a user.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-The user will provide ingredients in free-form text.
+app.use(express.json({ limit: "1mb" }));
 
-Return ONLY valid JSON.
-Do not use Markdown.
-Do not wrap the JSON in code fences.
-Do not add explanations before or after the JSON.
+/* ---------------------------------------
+   RECIPE VALIDATION
+--------------------------------------- */
 
-The JSON must have exactly this general structure:
-
-{
-  "title": "Recipe title",
-  "description": "Short description",
-  "servings": 2,
-  "ingredients": [
-    {
-      "name": "ingredient name",
-      "amount": 200,
-      "unit": "g",
-      "optional": false
-    }
-  ],
-  "steps": [
-    {
-      "id": 1,
-      "instruction": "Step description"
-    }
-  ],
-  "swaps": [
-    {
-      "ingredient": "ingredient name",
-      "swap": "possible replacement",
-      "note": "short explanation"
-    }
-  ]
-}
-
-Rules:
-
-1. Use ingredients supplied by the user whenever practical.
-2. Additional ingredients are allowed, but keep them reasonable.
-3. Amount must be a number when measurable.
-4. If an ingredient is naturally "to taste", amount may be null and unit can be "to taste".
-5. servings must be a positive integer.
-6. Include clear numbered cooking steps.
-7. Include useful ingredient substitutions when possible.
-8. Do not return conversational text.
-9. Return valid JSON only.
-`;
-
-function cleanJsonResponse(content) {
-  let cleaned = content.trim();
-
-  // Remove Markdown code fences if the model accidentally adds them.
-  cleaned = cleaned.replace(/^```json\s*/i, "");
-  cleaned = cleaned.replace(/^```\s*/i, "");
-  cleaned = cleaned.replace(/\s*```$/i, "");
-
-  // If the model added text around the JSON, try to isolate the object.
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-  }
-
-  return cleaned;
-}
-
-function isValidRecipe(recipe) {
+function validateRecipe(recipe) {
   if (!recipe || typeof recipe !== "object") {
     return false;
   }
 
-  if (typeof recipe.title !== "string" || recipe.title.trim() === "") {
+  if (
+    typeof recipe.title !== "string" ||
+    recipe.title.trim() === ""
+  ) {
     return false;
   }
 
@@ -99,11 +43,17 @@ function isValidRecipe(recipe) {
     return false;
   }
 
-  if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
+  if (
+    !Array.isArray(recipe.ingredients) ||
+    recipe.ingredients.length === 0
+  ) {
     return false;
   }
 
-  if (!Array.isArray(recipe.steps) || recipe.steps.length === 0) {
+  if (
+    !Array.isArray(recipe.steps) ||
+    recipe.steps.length === 0
+  ) {
     return false;
   }
 
@@ -116,20 +66,19 @@ function isValidRecipe(recipe) {
       !ingredient ||
       typeof ingredient.name !== "string" ||
       ingredient.name.trim() === "" ||
-      typeof ingredient.unit !== "string"
+      typeof ingredient.unit !== "string" ||
+      typeof ingredient.optional !== "boolean"
     ) {
       return false;
     }
 
     if (
       ingredient.amount !== null &&
-      (typeof ingredient.amount !== "number" ||
-        !Number.isFinite(ingredient.amount))
+      (
+        typeof ingredient.amount !== "number" ||
+        !Number.isFinite(ingredient.amount)
+      )
     ) {
-      return false;
-    }
-
-    if (typeof ingredient.optional !== "boolean") {
       return false;
     }
   }
@@ -159,145 +108,356 @@ function isValidRecipe(recipe) {
   return true;
 }
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "AI Chef backend"
-  });
-});
+
+/* ---------------------------------------
+   GROQ JSON SCHEMA
+--------------------------------------- */
+
+const recipeSchema = {
+  type: "object",
+
+  properties: {
+    title: {
+      type: "string"
+    },
+
+    description: {
+      type: "string"
+    },
+
+    servings: {
+      type: "integer",
+      minimum: 1
+    },
+
+    ingredients: {
+      type: "array",
+
+      items: {
+        type: "object",
+
+        properties: {
+          name: {
+            type: "string"
+          },
+
+          amount: {
+            type: ["number", "null"]
+          },
+
+          unit: {
+            type: "string"
+          },
+
+          optional: {
+            type: "boolean"
+          }
+        },
+
+        required: [
+          "name",
+          "amount",
+          "unit",
+          "optional"
+        ],
+
+        additionalProperties: false
+      }
+    },
+
+    steps: {
+      type: "array",
+
+      items: {
+        type: "object",
+
+        properties: {
+          id: {
+            type: "integer"
+          },
+
+          instruction: {
+            type: "string"
+          }
+        },
+
+        required: [
+          "id",
+          "instruction"
+        ],
+
+        additionalProperties: false
+      }
+    },
+
+    swaps: {
+      type: "array",
+
+      items: {
+        type: "object",
+
+        properties: {
+          ingredient: {
+            type: "string"
+          },
+
+          swap: {
+            type: "string"
+          },
+
+          note: {
+            type: "string"
+          }
+        },
+
+        required: [
+          "ingredient",
+          "swap",
+          "note"
+        ],
+
+        additionalProperties: false
+      }
+    }
+  },
+
+  required: [
+    "title",
+    "description",
+    "servings",
+    "ingredients",
+    "steps",
+    "swaps"
+  ],
+
+  additionalProperties: false
+};
+
+
+/* ---------------------------------------
+   RECIPE API
+--------------------------------------- */
 
 app.post("/api/recipe", async (req, res) => {
-  const { ingredients } = req.body;
-
-  if (
-    typeof ingredients !== "string" ||
-    ingredients.trim().length === 0
-  ) {
-    return res.status(400).json({
-      error: "Please provide at least one ingredient.",
-      code: "EMPTY_INPUT"
-    });
-  }
-
-  if (ingredients.trim().length > 2000) {
-    return res.status(400).json({
-      error: "Please keep the ingredient list under 2000 characters.",
-      code: "INPUT_TOO_LONG"
-    });
-  }
-
-  const controller = new AbortController();
-
-  // Protect the server from an Ollama request that takes too long.
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, 120000);
-
   try {
-    const ollamaResponse = await fetch(
-      "http://127.0.0.1:11434/api/chat",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: "llama3.2:3b",
-          stream: false,
-          messages: [
-            {
-              role: "system",
-              content: SYSTEM_PROMPT
-            },
-            {
-              role: "user",
-              content: `Create a recipe using these ingredients:
+    if (!GROQ_API_KEY) {
+      console.error("GROQ_API_KEY is missing.");
 
-${ingredients}`
-            }
-          ],
-          options: {
-            temperature: 0.2
-          }
-        })
-      }
-    );
-
-    if (!ollamaResponse.ok) {
-      const errorText = await ollamaResponse.text();
-
-      console.error("Ollama error:", errorText);
-
-      return res.status(502).json({
-        error:
-          "The local AI service could not generate a recipe. Make sure Ollama is running and the llama3.2:3b model is available.",
-        code: "OLLAMA_ERROR"
+      return res.status(500).json({
+        error: "AI service is not configured."
       });
     }
 
-    const data = await ollamaResponse.json();
-
-    const content = data?.message?.content;
+    const ingredients = req.body?.ingredients;
 
     if (
-      typeof content !== "string" ||
-      content.trim().length === 0
+      typeof ingredients !== "string" ||
+      ingredients.trim() === ""
     ) {
-      return res.status(502).json({
-        error: "The AI returned an empty response. Please try again.",
-        code: "EMPTY_AI_RESPONSE"
+      return res.status(400).json({
+        error: "Please provide at least one ingredient."
       });
     }
 
-    const cleanedJson = cleanJsonResponse(content);
+    if (ingredients.length > 2000) {
+      return res.status(400).json({
+        error: "Ingredient input is too long."
+      });
+    }
 
-    let recipe;
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 60000);
 
     try {
-      recipe = JSON.parse(cleanedJson);
-    } catch (parseError) {
-      console.error("Invalid AI JSON:", content);
+      const response = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
 
-      return res.status(502).json({
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${GROQ_API_KEY}`
+          },
+
+          signal: controller.signal,
+
+          body: JSON.stringify({
+            model: "openai/gpt-oss-20b",
+
+            messages: [
+              {
+                role: "system",
+
+                content: `
+You are AI Chef.
+
+Create a practical recipe using the ingredients supplied by the user.
+
+Rules:
+
+- Use the user's available ingredients where practical.
+- Keep the recipe realistic and easy to cook.
+- Use 2 to 6 servings.
+- Provide 5 to 8 cooking steps.
+- Provide 0 to 3 useful ingredient substitutions.
+- Keep the description short.
+- Keep cooking instructions concise.
+- Ingredient amount must be a number or null.
+- Ingredient unit must be a short unit such as g, ml, tbsp, tsp, cup, piece, clove, or to taste.
+- optional must be true or false.
+
+Return only the structured recipe.
+`
+              },
+
+              {
+                role: "user",
+
+                content:
+                  `Available ingredients:\n${ingredients.trim()}`
+              }
+            ],
+
+            response_format: {
+              type: "json_schema",
+
+              json_schema: {
+                name: "recipe",
+
+                strict: true,
+
+                schema: recipeSchema
+              }
+            },
+
+            temperature: 0.2,
+
+            max_completion_tokens: 1500
+          })
+        }
+      );
+
+      clearTimeout(timeout);
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        return res.status(502).json({
+          error: "The AI service returned an invalid response."
+        });
+      }
+
+      if (!response.ok) {
+        console.error("Groq API error:", data);
+
+        return res.status(502).json({
+          error:
+            data?.error?.message ||
+            "The AI service could not generate a recipe."
+        });
+      }
+
+      const content =
+        data?.choices?.[0]?.message?.content;
+
+      if (!content) {
+        return res.status(502).json({
+          error: "The AI returned an empty recipe."
+        });
+      }
+
+      let recipe;
+
+      try {
+        recipe = JSON.parse(content);
+      } catch {
+        return res.status(502).json({
+          error:
+            "The AI returned malformed recipe data."
+        });
+      }
+
+      if (!validateRecipe(recipe)) {
+        console.error(
+          "Invalid recipe returned by AI:",
+          recipe
+        );
+
+        return res.status(502).json({
+          error:
+            "The AI returned an unexpected recipe format."
+        });
+      }
+
+      return res.json(recipe);
+
+    } catch (error) {
+      clearTimeout(timeout);
+
+      if (error.name === "AbortError") {
+        return res.status(504).json({
+          error:
+            "The AI request took too long. Please try again."
+        });
+      }
+
+      console.error(
+        "Recipe generation error:",
+        error
+      );
+
+      return res.status(500).json({
         error:
-          "The AI returned an invalid recipe format. Please try again.",
-        code: "INVALID_AI_JSON"
+          "Unable to generate the recipe. Please try again."
       });
     }
 
-    if (!isValidRecipe(recipe)) {
-      console.error("Wrong recipe shape:", recipe);
-
-      return res.status(502).json({
-        error:
-          "The AI returned an unexpected recipe structure. Please try again.",
-        code: "INVALID_RECIPE_SHAPE"
-      });
-    }
-
-    return res.json(recipe);
   } catch (error) {
-    if (error.name === "AbortError") {
-      return res.status(504).json({
-        error:
-          "The AI took too long to respond. Please try again.",
-        code: "AI_TIMEOUT"
-      });
-    }
-
-    console.error("Server error:", error);
+    console.error(
+      "Unexpected server error:",
+      error
+    );
 
     return res.status(500).json({
-      error:
-        "Something went wrong while generating the recipe.",
-      code: "SERVER_ERROR"
+      error: "Something went wrong on the server."
     });
-  } finally {
-    clearTimeout(timeout);
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`AI Chef backend running at http://localhost:${PORT}`);
+
+/* ---------------------------------------
+   SERVE REACT FRONTEND
+--------------------------------------- */
+
+const frontendPath = path.join(
+  __dirname,
+  "../dist"
+);
+
+app.use(express.static(frontendPath));
+
+app.get("/{*splat}", (req, res) => {
+  res.sendFile(
+    path.join(frontendPath, "index.html")
+  );
 });
+
+
+/* ---------------------------------------
+   START SERVER
+--------------------------------------- */
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `AI Chef server running on port ${PORT}`
+    );
+  }
+);

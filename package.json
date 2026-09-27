@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "concurrently \"node server/index.js\" \"vite\"",
     "start": "concurrently \"node server/index.js\" \"vite\"",
+    "start:prod": "node server/index.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "dotenv": "^18.0.4",
     "express": "^5.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
