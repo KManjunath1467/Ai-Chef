@@ -14,7 +14,11 @@ Users can enter ingredients in natural language, and the application generates:
 The application uses **React + Express + Ollama + Llama 3.2 3B** and is designed around structured AI responses rather than a chatbot-style interface.
 
 ---
+## Deployed Link in render
+    https://ai-chef-79mk.onrender.com
+-->click on this website to see the working of the application in web
 
+---
 ## ✨ Features
 
 - 🥕 Natural-language ingredient input
