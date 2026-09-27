@@ -545,7 +545,7 @@ The demo will demonstrate:
 | React functional components | ✅ |
 | React hooks | ✅ |
 | Free-form ingredient input | ✅ |
-| Real LLM integration | ✅ Ollama |
+| Real LLM integration | ✅ Groq  |
 | Structured AI output | ✅ JSON |
 | AI response parsing | ✅ |
 | AI response validation | ✅ |
