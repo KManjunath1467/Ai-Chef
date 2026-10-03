@@ -13,23 +13,58 @@ Users can enter ingredients in natural language, and the application generates:
 - 👥 Serving information
 - ✅ Interactive cooking steps
 
+---
+
+## 📋 Table of Contents
+
+1. [Tech Stack](#-tech-stack)
+2. [Live Demo](#-live-demo)
+3. [Features](#-features)
+4. [Architecture](#-architecture)
+5. [Request Flow](#-request-flow)
+6. [Structured AI Responses](#-structured-ai-responses)
+7. [AI Response Validation](#-ai-response-validation)
+8. [Stale Request Protection](#-stale-request-protection)
+9. [Loading and Error States](#-loading-and-error-states)
+10. [API Key Security](#-api-key-security)
+11. [Getting Started](#-getting-started)
+12. [How to Use](#-how-to-use)
+13. [API](#-api)
+14. [AI Integration](#-ai-integration)
+15. [React Architecture](#-react-architecture)
+16. [Responsive Design](#-responsive-design)
+17. [Testing](#-testing)
+18. [Known Limitations](#-known-limitations)
+19. [Future Improvements](#-future-improvements)
+20. [Demo Video](#-demo-video)
+21. [Development Time](#-development-time)
+22. [Assignment Requirements Coverage](#-assignment-requirements-coverage)
+23. [Development AI Tool](#-development-ai-tool)
+24. [Author](#-author)
+
+---
+
 ### 🚀 Tech Stack
 
 **Frontend**
+
 - React
 - Vite
 - JavaScript
 - CSS
 
 **Backend**
+
 - Node.js
 - Express
 
 **AI**
+
 - Groq API
 - `openai/gpt-oss-20b`
 
 **Deployment**
+
 - Render
 
 ---
@@ -69,49 +104,49 @@ The application uses a **React + Express + Groq** architecture.
 The Groq API is called from the backend rather than directly from the browser. This keeps the API key out of the frontend.
 
 ```text
-                    ┌─────────────────────┐
-                    │    React Frontend   │
-                    │                     │
-                    │ Ingredient Input    │
-                    │ Recipe UI            │
-                    └──────────┬──────────┘
-                               │
-                               │ POST /api/recipe
-                               ▼
-                    ┌─────────────────────┐
-                    │   Express Backend   │
-                    │                     │
-                    │ Request Handling    │
-                    │ Validation          │
-                    │ Error Handling      │
-                    └──────────┬──────────┘
-                               │
-                               │ Groq API Request
-                               ▼
-                    ┌─────────────────────┐
-                    │      Groq API      │
-                    │                     │
-                    │ openai/gpt-oss-20b  │
-                    └──────────┬──────────┘
-                               │
-                               │ Structured JSON
-                               ▼
-                    ┌─────────────────────┐
-                    │   Express Backend   │
-                    │                     │
-                    │ Parse + Validate    │
-                    └──────────┬──────────┘
-                               │
-                               │ Validated Recipe
-                               ▼
-                    ┌─────────────────────┐
-                    │    React Recipe UI  │
-                    │                     │
-                    │ Ingredients         │
-                    │ Steps               │
-                    │ Swaps               │
-                    │ Servings            │
-                    └─────────────────────┘
+                     ┌─────────────────────┐
+                     │    React Frontend   │
+                     │                     │
+                     │ Ingredient Input    │
+                     │ Recipe UI           │
+                     └──────────┬──────────┘
+                                │
+                                │ POST /api/recipe
+                                ▼
+                     ┌─────────────────────┐
+                     │   Express Backend   │
+                     │                     │
+                     │ Request Handling    │
+                     │ Validation          │
+                     │ Error Handling      │
+                     └──────────┬──────────┘
+                                │
+                                │ Groq API Request
+                                ▼
+                     ┌─────────────────────┐
+                     │      Groq API      │
+                     │                     │
+                     │ openai/gpt-oss-20b  │
+                     └──────────┬──────────┘
+                                │
+                                │ Structured JSON
+                                ▼
+                     ┌─────────────────────┐
+                     │   Express Backend   │
+                     │                     │
+                     │ Parse + Validate    │
+                     └──────────┬──────────┘
+                                │
+                                │ Validated Recipe
+                                ▼
+                     ┌─────────────────────┐
+                     │    React Recipe UI  │
+                     │                     │
+                     │ Ingredients         │
+                     │ Steps               │
+                     │ Swaps               │
+                     │ Servings            │
+                     └─────────────────────┘
 ```
 
 ---
@@ -150,7 +185,7 @@ One of the main design decisions in this project is that the application does **
 
 Instead, the AI is instructed to return a predefined JSON structure.
 
-Example:
+### Example
 
 ```json
 {
